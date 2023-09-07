@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>BrewMEME Editor</title>
+  <style>
+    body {
+      text-align: center;
+      margin: 2em;
+    }
+    canvas, #progressBar, #refresh {
+      display: none;
+      margin: auto;
+    }
+    #progressBar, #refresh {
+      margin: auto;
+    }
+ 
+
+   
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.5.0/jszip.min.js"></script>
+</head>
+<body>
+  <h1>BrewMEME Editor</h1>
+  <p>Select multiple images to add colored bars at the top and bottom, or a single image for real-time preview.</p>
+  <br>
+
+  <input type="file" id="imageUpload" multiple>
+  <br><br>
+
+  <label for="marginSelector">Margin Percentage: </label>
+  <input type="number" id="marginSelector" min="1" max="50" value="20">
+  <br><br>
+
+  <label for="colorSelector">Block Color: </label>
+  <select id="colorSelector">
+    <option value="black">Black</option>
+    <option value="white">White</option>
+    <option value="gray">Gray</option>
+    <option value="red">Red</option>
+    <option value="orange">Orange</option>
+    <option value="yellow">Yellow</option>
+    <option value="green">Green</option>
+    <option value="blue">Blue</option>
+    <option value="indigo">Indigo</option>
+    <option value="violet">Violet</option>
+    <option value="inverse">Inverse of Background</option>
+  </select>
+  <br><br>
+<!-- Top Block Text -->
+    <label for="topText">Top Block Text: </label>
+    <input type="text" id="topText">
+    <label for="topTextSize">Size: </label>
+    <input type="number" id="topTextSize" value="70">
+    <label for="topTextColor">Color: </label>
+    <input type="color" id="topTextColor" value="#ffffff">
+    <input type="checkbox" id="topBold"> Bold
+    <input type="checkbox" id="topItalic"> Italic
+    <select id="topTextAlign">
+    <option value="center">Center</option>
+    <option value="left">Left</option>
+    <option value="right">Right</option>
+</select>
+<br>
+<!-- Bottom Block Text -->
+<label for="bottomText">Bottom Block Text: </label>
+<input type="text" id="bottomText">
+<label for="bottomTextSize">Size: </label>
+<input type="number" id="bottomTextSize" value="70">
+<label for="bottomTextColor">Color: </label>
+<input type="color" id="bottomTextColor" value="#ffffff">
+<input type="checkbox" id="bottomBold"> Bold
+<input type="checkbox" id="bottomItalic"> Italic
+<select id="bottomTextAlign">
+    <option value="center">Center</option>
+    <option value="left">Left</option>
+    <option value="right">Right</option>
+</select>
+  
+<br><br>
+  <button id="processImages">Process Images</button>
+  <br>
+
+  <progress id="progressBar" max="100"></progress>
+  <button id="refresh">Refresh</button>
+
+  <p id="progressText"></p>
+
+  <p id="downloadText">After processing, a zip file will be downloaded containing the modified images.</p>
+  <canvas id="canvas"></canvas>
+
+  <script>
+
+    // JavaScript code combining both functionalities
+    // This will include code for multiple uploads, watermark, and progress bar,
+    // as well as the real-time preview feature for a single image.
+
+    document.getElementById("topTextSize").addEventListener("wheel", function(event) {
+    this.value = parseInt(this.value) + (event.deltaY < 0 ? 1 : -1);
+    drawImage();
+    });
+
+    document.getElementById("bottomTextSize").addEventListener("wheel", function(event) {
+    this.value = parseInt(this.value) + (event.deltaY < 0 ? 1 : -1);
+    drawImage();
+    });
+
+  
+   function getAverageColor(context, startX, startY, endX, endY) {
+      const data = context.getImageData(startX, startY, endX, endY).data;
+      let r = 0, g = 0, b = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        r += data[i];
+        g += data[i + 1];
+        b += data[i + 2];
+      }
+      const pixelCount = data.length / 4;
+      return `rgb(${Math.floor(r / pixelCount)}, ${Math.floor(g / pixelCount)}, ${Math.floor(b / pixelCount)})`;
+    }
+
+    function invertColor(rgb) {
+      const split = rgb.substring(4, rgb.length - 1).split(',').map(Number);
+      return `rgb(${255 - split[0]}, ${255 - split[1]}, ${255 - split[2]})`;
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+        const zip = new JSZip();
+        const progressBar = document.getElementById("progressBar");
+        const refreshButton = document.getElementById("refresh");
+        const img = new Image();
+     
+      document.getElementById("processImages").addEventListener("click", async function() {
+        progressBar.style.display = "inline";
+        refreshButton.style.display = "inline";
+
+        const files = document.getElementById("imageUpload").files;
+        const marginPercent = parseFloat(document.getElementById("marginSelector").value) / 100;
+        let color = document.getElementById("colorSelector").value;
+        
+        if (files.length > 100) {
+          alert("Maximum of 100 images allowed.");
+          return;
+        }
+
+        for (let i = 0; i < files.length; i++) {
+          const originalFileName = files[i].name.split('.').slice(0, -1).join('.');
+          progressBar.value = (i / files.length) * 100;
+
+          await new Promise(resolve => {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+              const img = new Image();
+              img.onload = function() {
+                canvas.width = img.width;
+                canvas.height = img.height * (1 + 2 * marginPercent);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                ctx.drawImage(img, 0, img.height * marginPercent);
+
+                if (color === 'inverse') {
+                  color = invertColor(getAverageColor(ctx, 0, img.height * marginPercent, img.width, img.height));
+                }
+
+                ctx.fillStyle = color;
+                ctx.fillRect(0, 0, canvas.width, img.height * marginPercent);
+                ctx.fillRect(0, img.height * (1 + marginPercent), canvas.width, img.height * marginPercent);
+            // Add Top Text to Processed Images
+                const topText = document.getElementById("topText").value;
+                const topTextSize = parseInt(document.getElementById("topTextSize").value, 10);
+                const topTextColor = document.getElementById("topTextColor").value;
+                const topTextAlign = document.getElementById("topTextAlign").value;
+
+                let topFontStyle = "";
+                if (document.getElementById("topBold").checked) topFontStyle += "bold ";
+                if (document.getElementById("topItalic").checked) topFontStyle += "italic ";
+
+                ctx.font = `${topFontStyle}${topTextSize}px Arial`;
+                ctx.fillStyle = topTextColor;
+                ctx.textAlign = topTextAlign;
+                const middleYTopBlock = (img.height * marginPercent) / 2;
+                ctx.fillText(topText, canvas.width / 2, middleYTopBlock + topTextSize / 3);
+
+            // Add Bottom Text to Processed Images
+                const bottomText = document.getElementById("bottomText").value;
+                const bottomTextSize = parseInt(document.getElementById("bottomTextSize").value, 10);
+                const bottomTextColor = document.getElementById("bottomTextColor").value;
+                const bottomTextAlign = document.getElementById("bottomTextAlign").value;
+
+                let bottomFontStyle = "";
+                if (document.getElementById("bottomBold").checked) bottomFontStyle += "bold ";
+                if (document.getElementById("bottomItalic").checked) bottomFontStyle += "italic ";
+
+                ctx.font = `${bottomFontStyle}${bottomTextSize}px Arial`;
+                ctx.fillStyle = bottomTextColor;
+                ctx.textAlign = bottomTextAlign;
+                const middleYBottomBlock = img.height * (1 + marginPercent) + (img.height * marginPercent) / 2;
+                ctx.fillText(bottomText, canvas.width / 2, middleYBottomBlock);  
+                
+                const textWidth = ctx.measureText("BrewMeme.com").width;
+                const watermarkColor = invertColor(getAverageColor(ctx, canvas.width - 200, img.height - 30, 200, 30));
+                ctx.font = "20px Arial";
+                ctx.fillStyle = watermarkColor;
+                ctx.fillText("BrewMeme.com", img.width - textWidth - 10, img.height * (1 + marginPercent) - 10);
+
+                zip.file(`${originalFileName}_BrewMeme.com_blocks.png`, canvas.toDataURL().split(',')[1], {base64: true});
+                resolve();
+              };
+              img.src = event.target.result;
+            };
+            reader.readAsDataURL(files[i]);
+          });
+        }
+      
+        if (files.length > 1) {
+          zip.generateAsync({type: "blob"})
+            .then(function(blob) {
+              const link = document.createElement("a");
+              link.download = "images_with_boxes.zip";
+              link.href = URL.createObjectURL(blob);
+              link.click();
+            });
+        } else {
+          const originalFileName = files[0].name.split('.').slice(0, -1).join('.');
+          document.getElementById("downloadText").innerText = "A single image will be downloaded without zipping.";
+          canvas.toBlob(function(blob) {
+            const link = document.createElement("a");
+            link.download = `${originalFileName}_BrewMeme.com_blocks.png`;
+            link.href = URL.createObjectURL(blob);
+            link.click();
+          }, "image/png");
+        }
+        progressBar.value = 100;
+      });
+
+      refreshButton.addEventListener("click", function() {
+        location.reload();
+      });
+
+      img.addEventListener("load", function() {
+      // Display canvas when an image is loaded
+      canvas.style.display = "block";
+      drawImage();
+     });
+
+  document.getElementById("imageUpload").addEventListener("change", function(event) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(event.target.files[0]);
+  });
+
+  function drawImage() {
+    const marginPercent = parseFloat(document.getElementById("marginSelector").value) / 100;
+    let color = document.getElementById("colorSelector").value;
+
+    const maxWidth = window.innerWidth - 40; // Screen width minus some margin
+    const maxHeight = window.innerHeight - 200; // Screen height minus some margin
+    const widthScale = maxWidth / img.width; // Calculate width scale factor
+    const heightScale = maxHeight / (img.height * (1 + 2 * marginPercent)); // Calculate height scale factor
+    const scaleFactor = Math.min(widthScale, heightScale); // Take the smaller scale factor
+     
+    canvas.width = img.width * scaleFactor;
+    canvas.height = img.height * (1 + 2 * marginPercent) * scaleFactor;
+
+    // Add watermark
+    const textWidth = ctx.measureText("BrewMeme.com").width;
+    const watermarkColor = invertColor(getAverageColor(ctx, canvas.width - 200, img.height - 30, 200, 30));
+    const xPos = img.width - textWidth - 10;  // 10px padding from the right
+    const yPos = img.height * (1 + marginPercent) - 10 - 20;  // 10px padding from the bottom, 20 is text height
+    ctx.font = "20px Arial";
+    ctx.fillStyle = watermarkColor;
+    ctx.fillText("BrewMeme.com", xPos, yPos);
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(img, 0, img.height * marginPercent * scaleFactor, img.width * scaleFactor, img.height * scaleFactor);
+
+    if (color === 'inverse') {
+        color = 'white'; // Placeholder, replace with actual inverse color
+    }
+
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, canvas.width, img.height * marginPercent * scaleFactor);
+    ctx.fillRect(0, canvas.height - (img.height * marginPercent * scaleFactor), canvas.width, img.height * marginPercent * scaleFactor);
+   
+    const middleYTopBlock = (img.height * marginPercent * scaleFactor) / 2;
+    const middleYBottomBlock = canvas.height - (img.height * marginPercent * scaleFactor) / 2;
+
+    // Draw Top Text
+    const topText = document.getElementById("topText").value;
+    const topTextSize = parseInt(document.getElementById("topTextSize").value, 10);
+    const topTextColor = document.getElementById("topTextColor").value;
+    const topTextAlign = document.getElementById("topTextAlign").value;
+    
+
+    let topFontStyle = "";
+    if (document.getElementById("topBold").checked) topFontStyle += "bold ";
+    if (document.getElementById("topItalic").checked) topFontStyle += "italic ";
+
+    ctx.font = `${topFontStyle}${topTextSize}px Arial`;
+    ctx.fillStyle = topTextColor;
+    ctx.textAlign = topTextAlign;
+    ctx.textBaseline = 'middle'; // Set text alignment to middle
+    ctx.fillText(topText, canvas.width / 2, middleYTopBlock);
+   
+
+    // Draw Bottom Text
+    const bottomText = document.getElementById("bottomText").value;
+    const bottomTextSize = parseInt(document.getElementById("bottomTextSize").value, 10);
+    const bottomTextColor = document.getElementById("bottomTextColor").value;
+    const bottomTextAlign = document.getElementById("bottomTextAlign").value;
+    let bottomFontStyle = "";
+    if (document.getElementById("bottomBold").checked) bottomFontStyle += "bold ";
+    if (document.getElementById("bottomItalic").checked) bottomFontStyle += "italic ";
+    ctx.font = `${bottomFontStyle}${bottomTextSize}px Arial`;
+    ctx.fillStyle = bottomTextColor;
+    ctx.textAlign = bottomTextAlign;
+    ctx.textBaseline = 'middle'; // Set text alignment to middle
+    ctx.fillText(bottomText, canvas.width / 2, middleYBottomBlock);
+
+
+    }
+
+      img.addEventListener("load", function() {
+        drawImage();
+      });
+
+      document.getElementById("imageUpload").addEventListener("change", function(event) {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(event.target.files[0]);
+      });
+
+      document.getElementById("marginSelector").addEventListener("input", drawImage);
+      document.getElementById("colorSelector").addEventListener("change", drawImage);
+    
+        document.getElementById("topText").addEventListener("input", drawImage);
+        document.getElementById("topTextSize").addEventListener("input", drawImage);
+        document.getElementById("topTextColor").addEventListener("input", drawImage);
+        document.getElementById("topBold").addEventListener("change", drawImage);
+        document.getElementById("topItalic").addEventListener("change", drawImage);
+        document.getElementById("topTextAlign").addEventListener("change", drawImage);
+        document.getElementById("bottomText").addEventListener("input", drawImage);
+        document.getElementById("bottomTextSize").addEventListener("input", drawImage);
+        document.getElementById("bottomTextColor").addEventListener("input", drawImage);
+        document.getElementById("bottomBold").addEventListener("change", drawImage);
+        document.getElementById("bottomItalic").addEventListener("change", drawImage);
+        document.getElementById("bottomTextAlign").addEventListener("change", drawImage);
+    });
+  </script>
+</body>
+</html>
